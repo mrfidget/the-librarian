@@ -1,0 +1,63 @@
+services:
+  librarian:
+    build: .
+    image: ${IMAGE_NAME}:${VERSION}
+    container_name: ${CONTAINER_NAME}
+
+    # Keep running unless explicitly stopped.  On a reboot or crash Docker
+    # will bring it back automatically.
+    restart: unless-stopped
+
+    # The main entrypoint just sleeps so the container stays alive.
+    # Actual work is dispatched via `docker compose exec`.
+    command: ["sleep", "infinity"]
+
+    # --- volumes ---------------------------------------------------------
+    volumes:
+      # Persistent data (databases, staging, backups) lives on the host.
+      - ./data:/data
+      # urls.txt is mounted read-only so the container can read it but
+      # cannot accidentally overwrite the host copy.
+      - ./urls.txt:/app/urls.txt:ro
+
+    # --- resource limits -------------------------------------------------
+    # Hard cap matching the original 4 GB / 4-core constraint.
+    # mem_limit is the hard ceiling; the OOM killer fires if it is exceeded.
+    # cpus limits the container to 4 cores worth of CPU time even if the
+    # host has more.
+    mem_limit: 4g
+    cpus: 4.0
+
+    # --- logging ---------------------------------------------------------
+    # json-file with a 10 MB cap per file, 3 rotated files max.
+    # That gives you up to 30 MB of log history before the oldest file
+    # is recycled — plenty for troubleshooting without eating disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # --- environment -----------------------------------------------------
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - TRANSFORMERS_VERBOSITY=error
+
+  librarian-test:
+    # Shares the same image — no separate build step needed.
+    image: ${IMAGE_NAME}:${VERSION}
+
+    # Ephemeral: gone the moment pytest exits.
+    # No restart policy, no resource caps, no data volume.
+    # Tests create their own temp databases via fixtures.
+    command: ["pytest", "tests/", "-v"]
+    
+    environment:
+      - TRANSFORMERS_VERBOSITY=error
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "1"

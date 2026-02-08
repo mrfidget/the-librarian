@@ -1,5 +1,9 @@
 z-*
+.env
 .env.github
 .env.github.example
 .git-credentials
 Makefile.github
+urls.txt
+.vscode
+data
